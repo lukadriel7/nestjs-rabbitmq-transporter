@@ -8,7 +8,11 @@
     "build": "tsc -p .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "nestjs",
+    "microservices",
+    "rabbitmq"
+  ],
   "author": "Yozan Bi Adriel",
   "license": "MIT",
   "devDependencies": {

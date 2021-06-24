@@ -47,5 +47,13 @@
     "@nestjs/microservices": "^7.6.17",
     "amqp-connection-manager": "^3.2.2",
     "amqplib": "^0.8.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lukadriel7/nestjs-rabbitmq-transporter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Lukadriel7nestjs-rabbitmq-transporter/issues"
+  },
+  "homepage": "https://github.com/Lukadriel7/nestjs-rabbitmq-transporter#readme"
 }

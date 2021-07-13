@@ -38,10 +38,10 @@ export class RabbitMQClient extends ClientProxy {
   }
 
   public consumeChannel() {
-    const { noAck, queue } = this.options;
+    const { noAck, replyQueue } = this.options;
     this.channel.addSetup((channel: ConfirmChannel) => {
       channel.consume(
-        queue,
+        replyQueue,
         (message: ConsumeMessage) => {
           this.responseEmitter.emit(message.properties.correlationId, message);
         },
@@ -99,7 +99,7 @@ export class RabbitMQClient extends ClientProxy {
 
   public async setupChannel(channel: ConfirmChannel, resolve: any) {
     const {
-      queue,
+      replyQueue,
       queueOptions,
       exchange,
       exchangeType,
@@ -108,7 +108,7 @@ export class RabbitMQClient extends ClientProxy {
       isGlobalPrefetchCount,
     } = this.options;
     await channel.assertExchange(exchange, exchangeType, exchangeOptions);
-    await channel.assertQueue(queue, queueOptions);
+    await channel.assertQueue(replyQueue, queueOptions);
     await channel.prefetch(prefetchCount, isGlobalPrefetchCount);
     this.responseEmitter = new EventEmitter();
     this.responseEmitter.setMaxListeners(0);
@@ -155,28 +155,36 @@ export class RabbitMQClient extends ClientProxy {
       const correlationId = randomStringGenerator();
       const listener = ({ content }: { content: any }) =>
         this.handleMessage(JSON.parse(content.toString()), callback);
-      const { queue } = this.options;
-      const [destination, pattern] = message.pattern.split('/');
-      message.pattern = pattern;
-      const serializedPacket = this.serializer.serialize(message);
-      this.responseEmitter.on(correlationId, listener);
-      this.channel.sendToQueue(
-        destination,
-        Buffer.from(JSON.stringify(serializedPacket)),
-        {
-          correlationId,
-          replyTo: queue,
-        },
-      );
-      // this.channel.publish(
-      //   exchange,
-      //   message.pattern,
-      //   Buffer.from(JSON.stringify(serializedPacket)),
-      //   {
-      //     correlationId,
-      //     replyTo: queue,
-      //   },
-      // );
+      const { queue, replyQueue } = this.options;
+      const data = message.pattern.split('/');
+      if (data.length === 2) {
+        const [destination, pattern] = data;
+        message.pattern = pattern;
+        const serializedPacket = this.serializer.serialize(message);
+        this.responseEmitter.on(correlationId, listener);
+        this.channel.sendToQueue(
+          destination,
+          Buffer.from(JSON.stringify(serializedPacket)),
+          {
+            correlationId,
+            replyTo: replyQueue,
+          },
+        );
+      } else if (data.length === 1) {
+        message.pattern = data[0];
+        const serializedPacket = this.serializer.serialize(message);
+        this.responseEmitter.on(correlationId, listener);
+        this.channel.sendToQueue(
+          queue,
+          Buffer.from(JSON.stringify(serializedPacket)),
+          {
+            correlationId,
+            replyTo: replyQueue,
+          },
+        );
+      } else {
+        throw new Error('Invalid arguments for the message pattern');
+      }
       return () => this.responseEmitter.removeListener(correlationId, listener);
     } catch (err) {
       callback({ err });

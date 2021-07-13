@@ -8,7 +8,14 @@ I developped primarily this package to be able to use the topic exchange feature
 
 ## Warning
 
-This package is in early development and not ready for production
+This package is in early development and not ready for production. There may be many breaking change during developement.
+
+# Breaking Change
+
+### From v0.1.0 to v0.2.0
+
+The client requires a replyQueue at initialization to be created.
+The replyQueue is used as the client queue, the queue option is now used as the default queue to which messages will be sent when no queues are used in the message pattern `this.client.send('queue_name/pattern', { data: 'how are you' });`.
 
 # How to use
 
@@ -53,7 +60,8 @@ Add a new provider in a module
                     urls: ['amqp://localhost:5672'],
                     exchange: 'exchange_name',
                     exchangeType: ExchangeType.TOPIC,
-                    queue: 'client_queue_name',
+                    queue: 'server_queue_name',
+                    replyQueue: 'client_queue_name',
                     noAck: true,
                 });
             },

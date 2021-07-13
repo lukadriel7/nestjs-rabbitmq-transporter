@@ -58,9 +58,6 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
       this.logger.error(DISCONNECTED_RMQ_MESSAGE);
       this.logger.error(err);
     });
-    // this.channel = this.server.createChannel({
-    //   setup: (channel: ConfirmChannel) => this.setupChannel(channel, callback),
-    // });
   }
 
   public async setupChannel(channel: ConfirmChannel, callback: any) {
@@ -136,14 +133,10 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
     const outgoingResponse = this.serializer.serialize(
       message as unknown as OutgoingResponse,
     );
-    const { exchange } = this.options;
     const buffer = Buffer.from(JSON.stringify(outgoingResponse));
     this.channel.sendToQueue(replyTo, buffer, {
       correlationId,
     });
-    // this.channel.publish(exchange, replyTo, buffer, {
-    //   correlationId,
-    // });
   }
 
   close() {

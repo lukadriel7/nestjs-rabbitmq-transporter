@@ -81,7 +81,6 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
   }
 
   public async handleMessage(message: ConsumeMessage, channel: ConfirmChannel) {
-    //const handler = this.messageHandlers.get(msg.fields.routingKey);
     const rawMessage = JSON.parse(message.content.toString());
     const packet = this.deserializer.deserialize(rawMessage);
     const pattern = isString(packet.pattern)
@@ -116,12 +115,6 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
         message.properties.correlationId,
       );
     };
-    // const response = await handler(msg.content);
-    // channel.publish(
-    //   exchange,
-    //   msg.properties.replyTo,
-    //   Buffer.from(JSON.stringify(response)),
-    // );
     response$ && this.send(response$, publish);
   }
 

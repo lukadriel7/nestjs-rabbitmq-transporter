@@ -22,7 +22,7 @@ The replyQueue is used as the client queue, the queue option is now used as the 
 ## Microservices
 
 ### Server
-
+```ts
     import { NestFactory } from '@nestjs/core';
     import { MicroserviceOptions } from '@nestjs/microservices';
     import { AppModule } from './app.module';
@@ -47,11 +47,11 @@ The replyQueue is used as the client queue, the queue option is now used as the 
         app.listen();
     }
     bootstrap();
-
+```
 ### Client
 
 Add a new provider in a module
-
+```ts
     providers: [
         {
             provide: 'RABBITMQ_CLIENT',
@@ -67,23 +67,23 @@ Add a new provider in a module
             },
         },
     ],
-
+```
 Inject the provider where you want to use it
-
+```ts
     constructor(@Inject('RABBITMQ_CLIENT') private readonly client: ClientProxy){}
-
+```
 Emitting event works as usual. All events will go through the defined exchange topic.
 
     this.client.emit('pattern', { data: 'how are you' });
 
 For the request-response pattern, the request are sent to a specific queue defined by the pattern 'queue_name/pattern'
-
+```ts
     this.client.send('queue_name/pattern', { data: 'how are you' });
-
+```
 ## Hybrid Applications
 
 ### Server
-
+```ts
     import { NestFactory } from '@nestjs/core';
     import { MicroserviceOptions } from '@nestjs/microservices';
     import { AppModule } from './app.module';
@@ -107,7 +107,7 @@ For the request-response pattern, the request are sent to a specific queue defin
     await app.listen(3000);
     }
     bootstrap();
-
+```
 ### Client
 
 Same as for the microservice applications

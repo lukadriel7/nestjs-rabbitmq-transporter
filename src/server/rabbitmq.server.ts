@@ -82,7 +82,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
 
   public async handleMessage(message: ConsumeMessage, channel: ConfirmChannel) {
     const rawMessage = JSON.parse(message.content.toString());
-    const packet = this.deserializer.deserialize(rawMessage);
+    const packet = await this.deserializer.deserialize(rawMessage);
     const pattern = isString(packet.pattern)
       ? packet.pattern
       : JSON.stringify(packet.pattern);

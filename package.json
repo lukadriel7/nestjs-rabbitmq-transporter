@@ -1,6 +1,6 @@
 {
   "name": "@lukadriel/nestjs-rabbitmq-transporter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A NestJS package for rabbitmq microservices using exchanges for event emission and queues for request-response messaging style",
   "main": "dist/index.js",
   "types": "dist",

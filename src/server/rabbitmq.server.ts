@@ -75,7 +75,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
       channel.bindQueue(queue, exchange, pattern);
     });
     channel.consume(queue, (msg) => this.handleMessage(msg, channel), {
-      noAck: noAck ? noAck : true,
+      noAck: noAck !== undefined ? noAck : true,
     });
     callback();
   }

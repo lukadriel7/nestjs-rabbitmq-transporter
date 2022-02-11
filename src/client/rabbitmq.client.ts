@@ -7,7 +7,7 @@ import {
 import { ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { EventEmitter } from 'events';
 import { RMQOptions } from '../interfaces/rmq-options.interface';
-import { fromEvent, merge, Observable } from 'rxjs';
+import { fromEvent, merge, Observable, lastValueFrom } from 'rxjs';
 import { first, map, share, switchMap } from 'rxjs/operators';
 import { Logger } from '@nestjs/common';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
@@ -61,12 +61,12 @@ export class RabbitMQClient extends ClientProxy {
     this.handleDisconnectError(this.client);
 
     const connect$ = this.connect$(this.client);
-    this.connection = this.mergeDisconnectEvent(this.client, connect$)
-      .pipe(
+    this.connection = lastValueFrom(
+      this.mergeDisconnectEvent(this.client, connect$).pipe(
         switchMap(() => this.createChannel()),
         share(),
-      )
-      .toPromise();
+      ),
+    );
 
     return this.connection;
   }

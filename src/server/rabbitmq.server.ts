@@ -13,7 +13,6 @@ import {
   connect,
 } from 'amqp-connection-manager';
 import { RMQOptions } from '../interfaces/rmq-options.interface';
-import { Observable } from 'rxjs';
 import {
   CONNECT_EVENT,
   DISCONNECTED_RMQ_MESSAGE,
@@ -104,9 +103,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
         message.properties.correlationId,
       );
     }
-    const response$ = this.transformToObservable(
-      await handler(packet.data),
-    ) as Observable<any>;
+    const response$ = this.transformToObservable(await handler(packet.data));
     const publish = (response: any) => {
       const outgoingResponse = this.serializer.serialize(response);
       this.sendMessage(

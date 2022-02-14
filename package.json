@@ -6,6 +6,7 @@
   "types": "dist",
   "scripts": {
     "build": "tsc -p .",
+    "dev": "tsc -w",
     "prod": "tsc -p && yarn publish",
     "test": "echo \"Error: no test specified\" && exit 1",
     "format": "prettier --write \"src/**/*.ts\""

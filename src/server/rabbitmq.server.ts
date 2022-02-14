@@ -12,11 +12,15 @@ import {
   ChannelWrapper,
   connect,
 } from 'amqp-connection-manager';
-import { RMQOptions } from '../interfaces/rmq-options.interface';
+import { RMQServerOptions } from '../interfaces/rmq-options.interface';
 import {
   CONNECT_EVENT,
+  CONNECT_FAILED_EVENT,
+  CONNECT_FAILED_RMQ_MESSAGE,
   DISCONNECTED_RMQ_MESSAGE,
   DISCONNECT_EVENT,
+  ERROR_EVENT,
+  ERROR_RMQ_MESSAGE,
   NO_MESSAGE_HANDLER,
 } from '../constants';
 import { RmqContext } from '../ctx-host/rmq.context';
@@ -26,7 +30,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
   private server: AmqpConnectionManager;
   private channel: ChannelWrapper;
 
-  constructor(private readonly options: RMQOptions) {
+  constructor(private readonly options: RMQServerOptions) {
     super();
     this.initializeSerializer(options);
     this.initializeDeserializer(options);
@@ -53,10 +57,28 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
           this.setupChannel(channel, callback),
       });
     });
-    this.server.on(DISCONNECT_EVENT, (err: any) => {
-      this.logger.error(DISCONNECTED_RMQ_MESSAGE);
+    this.handleRMQEvents();
+  }
+
+  public handleRMQEvents() {
+    this.server.on(CONNECT_FAILED_EVENT, (err) => {
+      this.logger.error(CONNECT_FAILED_RMQ_MESSAGE);
       this.logger.error(err);
     });
+    this.server.on(DISCONNECT_EVENT, (err) => {
+      this.logger.error(DISCONNECTED_RMQ_MESSAGE);
+      this.logger.error(err);
+      this.close();
+    });
+    this.server.on(ERROR_EVENT, (err) => {
+      this.logger.error(ERROR_RMQ_MESSAGE);
+      this.logger.error(err);
+    });
+    // Causes error
+    // this.client.on(CONNECT_EVENT, (res) => {
+    //   this.logger.log(CONNECTED_RMQ_MESSAGE);
+    //   this.logger.log(res);
+    // });
   }
 
   public async setupChannel(channel: ConfirmChannel, callback: any) {
@@ -67,6 +89,8 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
       exchangeType,
       exchangeOptions,
       noAck,
+      prefetchCount,
+      isGlobalPrefetchCount,
     } = this.options;
     await channel.assertExchange(exchange, exchangeType, exchangeOptions);
     await channel.assertQueue(queue, queueOptions);
@@ -76,6 +100,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
     channel.consume(queue, (msg) => this.handleMessage(msg, channel), {
       noAck: noAck !== undefined ? noAck : true,
     });
+    await channel.prefetch(prefetchCount, isGlobalPrefetchCount);
     callback();
   }
 

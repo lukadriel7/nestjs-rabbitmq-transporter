@@ -2,19 +2,24 @@ import { ClientProxy, ReadPacket, WritePacket } from '@nestjs/microservices';
 import {
   AmqpConnectionManager,
   ChannelWrapper,
-  connect,
+  connect as connectAMQP,
 } from 'amqp-connection-manager';
 import { ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { EventEmitter } from 'events';
-import { RMQOptions } from '../interfaces/rmq-options.interface';
+import { RMQClientOptions } from '../interfaces/rmq-options.interface';
 import { fromEvent, merge, Observable, lastValueFrom } from 'rxjs';
 import { first, map, share, switchMap } from 'rxjs/operators';
 import { Logger } from '@nestjs/common';
 import { randomStringGenerator } from '@nestjs/common/utils/random-string-generator.util';
 import {
+  // CONNECTED_RMQ_MESSAGE,
+  // CONNECT_EVENT,
+  CONNECT_FAILED_EVENT,
+  CONNECT_FAILED_RMQ_MESSAGE,
   DISCONNECTED_RMQ_MESSAGE,
   DISCONNECT_EVENT,
   ERROR_EVENT,
+  ERROR_RMQ_MESSAGE,
 } from '../constants';
 
 export class RabbitMQClient extends ClientProxy {
@@ -23,43 +28,20 @@ export class RabbitMQClient extends ClientProxy {
   protected channel: ChannelWrapper;
   protected responseEmitter: EventEmitter;
   protected connection: Promise<any>;
+  protected replyQueue: string;
 
-  constructor(private readonly options: RMQOptions) {
+  constructor(private readonly options: RMQClientOptions) {
     super();
     this.initializeSerializer(options);
     this.initializeDeserializer(options);
   }
 
-  public close(): void {
-    this.channel && this.channel.close();
-    this.client && this.client.close();
-    this.channel = null;
-    this.client = null;
-  }
-
-  public consumeChannel() {
-    const { noAck, replyQueue } = this.options;
-    this.channel.addSetup((channel: ConfirmChannel) => {
-      channel.consume(
-        replyQueue,
-        (message: ConsumeMessage) => {
-          this.responseEmitter.emit(message.properties.correlationId, message);
-        },
-        {
-          noAck,
-        },
-      );
-    });
-  }
-
-  public connect(): Promise<any> {
+  public override connect(): Promise<any> {
     if (this.client) {
       return this.connection;
     }
     this.client = this.createClient();
-    this.handleError(this.client);
-    this.handleDisconnectError(this.client);
-
+    this.handleRMQEvents();
     const connect$ = this.connect$(this.client);
     this.connection = lastValueFrom(
       this.mergeDisconnectEvent(this.client, connect$).pipe(
@@ -67,22 +49,33 @@ export class RabbitMQClient extends ClientProxy {
         share(),
       ),
     );
-
     return this.connection;
-  }
-
-  public createChannel(): Promise<void> {
-    return new Promise((resolve) => {
-      this.channel = this.client.createChannel({
-        json: false,
-        setup: (channel: any) => this.setupChannel(channel, resolve),
-      });
-    });
   }
 
   public createClient() {
     const { urls, socketOptions } = this.options;
-    return connect(urls, socketOptions);
+    return connectAMQP(urls, socketOptions);
+  }
+
+  public handleRMQEvents() {
+    this.client.on(CONNECT_FAILED_EVENT, (err) => {
+      this.logger.error(CONNECT_FAILED_RMQ_MESSAGE);
+      this.logger.error(err);
+    });
+    this.client.on(DISCONNECT_EVENT, (err) => {
+      this.logger.error(DISCONNECTED_RMQ_MESSAGE);
+      this.logger.error(err);
+      this.close();
+    });
+    this.client.on(ERROR_EVENT, (err) => {
+      this.logger.error(ERROR_RMQ_MESSAGE);
+      this.logger.error(err);
+    });
+    // Causes error
+    // this.client.on(CONNECT_EVENT, (res) => {
+    //   this.logger.log(CONNECTED_RMQ_MESSAGE);
+    //   this.logger.log(res);
+    // });
   }
 
   public mergeDisconnectEvent<T = any>(
@@ -97,10 +90,19 @@ export class RabbitMQClient extends ClientProxy {
     return merge(source$, close$).pipe(first());
   }
 
+  public createChannel(): Promise<void> {
+    return new Promise((resolve) => {
+      this.channel = this.client.createChannel({
+        json: false,
+        setup: (channel: ConfirmChannel) => this.setupChannel(channel, resolve),
+      });
+    });
+  }
+
   public async setupChannel(channel: ConfirmChannel, resolve: any) {
     const {
       replyQueue,
-      queueOptions,
+      replyQueueOptions,
       exchange,
       exchangeType,
       exchangeOptions,
@@ -108,7 +110,14 @@ export class RabbitMQClient extends ClientProxy {
       isGlobalPrefetchCount,
     } = this.options;
     await channel.assertExchange(exchange, exchangeType, exchangeOptions);
-    await channel.assertQueue(replyQueue, queueOptions);
+    const queueOptions =
+      replyQueueOptions !== undefined ? replyQueueOptions : { exclusive: true };
+    if (replyQueue !== undefined) {
+      this.replyQueue = replyQueue;
+      await channel.assertQueue(this.replyQueue, queueOptions);
+    } else {
+      this.replyQueue = (await channel.assertQueue('', queueOptions)).queue;
+    }
     await channel.prefetch(prefetchCount, isGlobalPrefetchCount);
     this.responseEmitter = new EventEmitter();
     this.responseEmitter.setMaxListeners(0);
@@ -116,17 +125,64 @@ export class RabbitMQClient extends ClientProxy {
     resolve();
   }
 
-  public handleError(client: any): void {
-    client.addListener(ERROR_EVENT, (err: any) => this.logger.error(err));
+  public consumeChannel() {
+    const { noAck } = this.options;
+    this.channel.addSetup((channel: ConfirmChannel) => {
+      channel.consume(
+        this.replyQueue,
+        (message: ConsumeMessage) => {
+          this.responseEmitter.emit(message.properties.correlationId, message);
+        },
+        {
+          noAck: noAck !== undefined ? noAck : true,
+          exclusive: true,
+        },
+      );
+    });
   }
 
-  public handleDisconnectError(client: any): void {
-    client.addListener(DISCONNECT_EVENT, (err: any) => {
-      this.logger.error(DISCONNECTED_RMQ_MESSAGE);
-      this.logger.error(err);
-
-      this.close();
-    });
+  protected override publish(
+    message: ReadPacket,
+    callback: (packet: WritePacket) => any,
+  ): any {
+    try {
+      const correlationId = randomStringGenerator();
+      const listener = ({ content }: { content: any }) =>
+        this.handleMessage(JSON.parse(content.toString()), callback);
+      const { queue } = this.options;
+      const data = message.pattern.split('/');
+      if (data.length === 2) {
+        const [destination, pattern] = data;
+        message.pattern = pattern;
+        const serializedPacket = this.serializer.serialize(message);
+        this.responseEmitter.on(correlationId, listener);
+        this.channel.sendToQueue(
+          destination,
+          Buffer.from(JSON.stringify(serializedPacket)),
+          {
+            correlationId,
+            replyTo: this.replyQueue,
+          },
+        );
+      } else if (data.length === 1) {
+        message.pattern = data[0];
+        const serializedPacket = this.serializer.serialize(message);
+        this.responseEmitter.on(correlationId, listener);
+        this.channel.sendToQueue(
+          queue,
+          Buffer.from(JSON.stringify(serializedPacket)),
+          {
+            correlationId,
+            replyTo: this.replyQueue,
+          },
+        );
+      } else {
+        throw new Error('Invalid arguments for the message pattern');
+      }
+      return () => this.responseEmitter.removeListener(correlationId, listener);
+    } catch (err) {
+      callback({ err });
+    }
   }
 
   public async handleMessage(
@@ -149,51 +205,7 @@ export class RabbitMQClient extends ClientProxy {
     });
   }
 
-  protected publish(
-    message: ReadPacket,
-    callback: (packet: WritePacket) => any,
-  ): any {
-    try {
-      const correlationId = randomStringGenerator();
-      const listener = ({ content }: { content: any }) =>
-        this.handleMessage(JSON.parse(content.toString()), callback);
-      const { queue, replyQueue } = this.options;
-      const data = message.pattern.split('/');
-      if (data.length === 2) {
-        const [destination, pattern] = data;
-        message.pattern = pattern;
-        const serializedPacket = this.serializer.serialize(message);
-        this.responseEmitter.on(correlationId, listener);
-        this.channel.sendToQueue(
-          destination,
-          Buffer.from(JSON.stringify(serializedPacket)),
-          {
-            correlationId,
-            replyTo: replyQueue,
-          },
-        );
-      } else if (data.length === 1) {
-        message.pattern = data[0];
-        const serializedPacket = this.serializer.serialize(message);
-        this.responseEmitter.on(correlationId, listener);
-        this.channel.sendToQueue(
-          queue,
-          Buffer.from(JSON.stringify(serializedPacket)),
-          {
-            correlationId,
-            replyTo: replyQueue,
-          },
-        );
-      } else {
-        throw new Error('Invalid arguments for the message pattern');
-      }
-      return () => this.responseEmitter.removeListener(correlationId, listener);
-    } catch (err) {
-      callback({ err });
-    }
-  }
-
-  protected dispatchEvent(packet: ReadPacket): Promise<any> {
+  protected override dispatchEvent(packet: ReadPacket): Promise<any> {
     const serializedPacket = this.serializer.serialize(packet);
     const { exchange } = this.options;
     return new Promise<void>((resolve, reject) =>
@@ -207,5 +219,12 @@ export class RabbitMQClient extends ClientProxy {
         (err) => (err ? reject(err) : resolve()),
       ),
     );
+  }
+
+  public override close(): void {
+    this.channel && this.channel.close();
+    this.client && this.client.close();
+    this.channel = null;
+    this.client = null;
   }
 }

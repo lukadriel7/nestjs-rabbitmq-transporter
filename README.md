@@ -17,6 +17,15 @@ This package is in early development and not ready for production. There may be 
 The client requires a replyQueue at initialization to be created.
 The replyQueue is used as the client queue, the queue option is now used as the default queue to which messages will be sent when no queues are used in the message pattern `this.client.send('queue_name/pattern', { data: 'how are you' });`.
 
+
+### From v0.2.0 to v0.3.0
+
+- The client no longer requires a replyQueue at initialization to be created.
+The `replyQueue` is used as the client queue for response in a request-response message, but leaving it empty will let the library create an anonymous queue.
+- By default the queue created will have `exclusive: true` as the only option, it can be customized using `replyQueueOptions`.
+- It is recommanded to use a random string generator and set the queue option to exclusive to be able to create more than one client application instance (in the case of using a load balancer for example) and prevent the round-robin nature of rabbitmq to send a message to an instance that didn't make a request. 
+- The `queueOptions` is no longer available on `RabbitMQClient` constructor and has been replaced with `replyQueueOptions` which is more explicit.
+
 # How to use
 
 ## Microservices
@@ -62,6 +71,9 @@ Add a new provider in a module
                     exchangeType: ExchangeType.TOPIC,
                     queue: 'server_queue_name',
                     replyQueue: 'client_queue_name',
+                    replyQueueOptions: {
+                        exclusive: true,
+                    }
                     noAck: true,
                 });
             },

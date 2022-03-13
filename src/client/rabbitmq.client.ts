@@ -161,9 +161,9 @@ export class RabbitMQClient extends ClientProxy {
         message.data = message.data.content;
       }
       const publishOptions: PublishOptions = {
-        correlationId,
         replyTo: this.replyQueue,
         ...messageOptions,
+        correlationId,
       };
       const data = message.pattern.split('/');
       if (data.length === 2) {

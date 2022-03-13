@@ -69,6 +69,40 @@ export interface QueueOptions {
   maxPriority?: number;
 }
 
+export interface MessageOptions {
+  expiration?: string | number | undefined;
+  userId?: string | undefined;
+  CC?: string | string[] | undefined;
+
+  mandatory?: boolean | undefined;
+  persistent?: boolean | undefined;
+  deliveryMode?: boolean | number | undefined;
+  BCC?: string | string[] | undefined;
+
+  contentType?: string | undefined;
+  contentEncoding?: string | undefined;
+  headers?: any;
+  priority?: number | undefined;
+  messageId?: string | undefined;
+  timestamp?: number | undefined;
+  type?: string | undefined;
+  appId?: string | undefined;
+  timeout?: number;
+}
+export interface PublishOptions extends MessageOptions {
+  correlationId?: string | undefined;
+  replyTo?: string | undefined;
+}
+
+export interface RMQMessage {
+  options?: MessageOptions;
+  content: string;
+}
+export interface RMQServerResponse {
+  response: RMQMessage | string;
+  isDisposed: boolean;
+}
+
 export interface ExchangeOptions {
   /** */
   durable?: boolean;

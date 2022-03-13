@@ -6,7 +6,12 @@ import {
 } from 'amqp-connection-manager';
 import { ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { EventEmitter } from 'events';
-import { RMQClientOptions } from '../interfaces/rmq-options.interface';
+import {
+  MessageOptions,
+  PublishOptions,
+  RMQClientOptions,
+  RMQMessage,
+} from '../interfaces/rmq-options.interface';
 import { fromEvent, merge, Observable, lastValueFrom } from 'rxjs';
 import { first, map, share, switchMap } from 'rxjs/operators';
 import { Logger } from '@nestjs/common';
@@ -142,7 +147,7 @@ export class RabbitMQClient extends ClientProxy {
   }
 
   protected override publish(
-    message: ReadPacket,
+    message: ReadPacket<string | RMQMessage>,
     callback: (packet: WritePacket) => any,
   ): any {
     try {
@@ -150,6 +155,16 @@ export class RabbitMQClient extends ClientProxy {
       const listener = ({ content }: { content: any }) =>
         this.handleMessage(JSON.parse(content.toString()), callback);
       const { queue } = this.options;
+      let messageOptions: MessageOptions;
+      if (typeof message.data !== 'string') {
+        messageOptions = message.data.options;
+        message.data = message.data.content;
+      }
+      const publishOptions: PublishOptions = {
+        replyTo: this.replyQueue,
+        ...messageOptions,
+        correlationId,
+      };
       const data = message.pattern.split('/');
       if (data.length === 2) {
         const [destination, pattern] = data;
@@ -159,10 +174,7 @@ export class RabbitMQClient extends ClientProxy {
         this.channel.sendToQueue(
           destination,
           Buffer.from(JSON.stringify(serializedPacket)),
-          {
-            correlationId,
-            replyTo: this.replyQueue,
-          },
+          publishOptions,
         );
       } else if (data.length === 1) {
         message.pattern = data[0];
@@ -171,10 +183,7 @@ export class RabbitMQClient extends ClientProxy {
         this.channel.sendToQueue(
           queue,
           Buffer.from(JSON.stringify(serializedPacket)),
-          {
-            correlationId,
-            replyTo: this.replyQueue,
-          },
+          publishOptions,
         );
       } else {
         throw new Error('Invalid arguments for the message pattern');
@@ -205,7 +214,18 @@ export class RabbitMQClient extends ClientProxy {
     });
   }
 
-  protected override dispatchEvent(packet: ReadPacket): Promise<any> {
+  protected override dispatchEvent(
+    packet: ReadPacket<string | RMQMessage>,
+  ): Promise<any> {
+    let messageOptions: MessageOptions;
+    if (typeof packet.data !== 'string') {
+      messageOptions = packet.data.options;
+      packet.data = packet.data.content;
+    }
+    const publishOptions: PublishOptions = {
+      persistent: true,
+      ...messageOptions,
+    };
     const serializedPacket = this.serializer.serialize(packet);
     const { exchange } = this.options;
     return new Promise<void>((resolve, reject) =>
@@ -213,9 +233,7 @@ export class RabbitMQClient extends ClientProxy {
         exchange,
         packet.pattern,
         Buffer.from(JSON.stringify(serializedPacket)),
-        {
-          persistent: true,
-        },
+        publishOptions,
         (err) => (err ? reject(err) : resolve()),
       ),
     );

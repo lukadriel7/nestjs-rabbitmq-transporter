@@ -28,7 +28,62 @@ The `replyQueue` is used as the client queue for response in a request-response 
 
 # How to use
 
+## Sending messages
+From 0.3.1, it is possible to configure the message options and send them along the message itself by sending an RMQMessage instead of a string. This allows to use specific options per message.
+```ts
+import { RMQMessage } from '@lukadriel/nestjs-rabbitmq-transporter/dist/interfaces/rmq-options.interface';
+import { Controller, Get, Inject } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+
+@Controller()
+export class AppController {
+  constructor(
+    @Inject('RABBITMQ_CLIENT') private readonly rabbitmqClient: ClientProxy,
+  ) {}
+
+  @Get()
+  getHello() {
+    const msg: RMQMessage = {
+      content: 'hey there',
+      options: {
+        persistent: true,
+      },
+    };
+    this.rabbitmqClient.send('hello', msg).subscribe((data) => {
+      console.log('response: ', data);
+    });
+    return 'message sent';
+  }
+}
+```
+This also apply to the server response which can return an RMQMessage.
+
+```ts
+import { RMQMessage } from '@lukadriel/nestjs-rabbitmq-transporter/dist/interfaces/rmq-options.interface';
+import { Controller } from '@nestjs/common';
+import { MessagePattern } from '@nestjs/microservices';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @MessagePattern('hello')
+  getHello(data: any) {
+    console.log('received from client: ', data);
+    const response: RMQMessage = {
+      content: data,
+      options: {
+        persistent: true,
+      },
+    };
+    return response;
+  }
+}
+
+```
+
 ## Microservices
+
 
 ### Server
 ```ts

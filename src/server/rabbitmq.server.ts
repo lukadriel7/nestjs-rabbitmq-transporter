@@ -12,7 +12,11 @@ import {
   ChannelWrapper,
   connect,
 } from 'amqp-connection-manager';
-import { RMQServerOptions } from '../interfaces/rmq-options.interface';
+import {
+  PublishOptions,
+  RMQServerOptions,
+  RMQServerResponse,
+} from '../interfaces/rmq-options.interface';
 import {
   CONNECT_EVENT,
   CONNECT_FAILED_EVENT,
@@ -117,10 +121,15 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
     const handler = this.getHandlerByPattern(pattern);
     if (!handler) {
       const status = 'error';
-      const noHandlerPacket = {
-        id: message.properties.correlationId,
-        err: NO_MESSAGE_HANDLER,
-        status,
+      const noHandlerPacket: RMQServerResponse = {
+        isDisposed: true,
+        response: {
+          content: JSON.stringify({
+            id: message.properties.correlationId,
+            err: NO_MESSAGE_HANDLER,
+            status,
+          }),
+        },
       };
       return this.sendMessage(
         noHandlerPacket,
@@ -140,18 +149,23 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
     response$ && this.send(response$, publish);
   }
 
-  public sendMessage<T = any>(
-    message: T,
+  public sendMessage(
+    message: RMQServerResponse,
     replyTo: any,
     correlationId: string,
   ): void {
+    let publishOptions: PublishOptions = {
+      correlationId,
+    };
+    if (typeof message.response !== 'string') {
+      publishOptions = { ...message.response.options, ...publishOptions };
+      message.response = message.response.content;
+    }
     const outgoingResponse = this.serializer.serialize(
       message as unknown as OutgoingResponse,
     );
     const buffer = Buffer.from(JSON.stringify(outgoingResponse));
-    this.channel.sendToQueue(replyTo, buffer, {
-      correlationId,
-    });
+    this.channel.sendToQueue(replyTo, buffer, publishOptions);
   }
 
   close() {

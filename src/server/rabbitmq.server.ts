@@ -137,7 +137,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
         message.properties.correlationId,
       );
     }
-    const response$ = this.transformToObservable(await handler(packet.data));
+    const response$ = this.transformToObservable(await handler(packet.data, rmqContext));
     const publish = (response: any) => {
       const outgoingResponse = this.serializer.serialize(response);
       this.sendMessage(

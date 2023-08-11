@@ -56,7 +56,7 @@ export class AppController {
   }
 }
 ```
-This also apply to the server response which can return an RMQMessage.
+This also apply to the server response which can return an RMQMessage and rabbitMQ context.
 
 ```ts
 import { RMQMessage } from '@lukadriel/nestjs-rabbitmq-transporter/dist/interfaces/rmq-options.interface';
@@ -68,7 +68,7 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @MessagePattern('hello')
-  getHello(data: any) {
+  getHello(@Payload() data: any, @Ctx() context) {
     console.log('received from client: ', data);
     const response: RMQMessage = {
       content: data,
@@ -81,6 +81,10 @@ export class AppController {
 }
 
 ```
+
+you can also use `*` in `@MessagePattern('*')` to listen all routing keys (patterns)
+
+**Note: Only 1 handler can listen a pattern. If you listen a specific pattern, star handler will not run.**
 
 ## Microservices
 

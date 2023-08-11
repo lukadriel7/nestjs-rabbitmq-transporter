@@ -118,7 +118,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
     if (isUndefined(message.properties.replyTo)) {
       return this.handleEvent(pattern, packet, rmqContext);
     }
-    const handler = this.getHandlerByPattern(pattern);
+    const handler = this.getHandlerByPattern(pattern) || this.getHandlerByPattern('*');
     if (!handler) {
       const status = 'error';
       const noHandlerPacket: RMQServerResponse = {
@@ -137,7 +137,7 @@ export class RabbitMQServer extends Server implements CustomTransportStrategy {
         message.properties.correlationId,
       );
     }
-    const response$ = this.transformToObservable(await handler(packet.data));
+    const response$ = this.transformToObservable(await handler(packet.data, rmqContext));
     const publish = (response: any) => {
       const outgoingResponse = this.serializer.serialize(response);
       this.sendMessage(
